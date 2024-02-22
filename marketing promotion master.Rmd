@@ -1,0 +1,209 @@
+---
+title: "R Notebook"
+output: html_notebook
+editor_options: 
+  chunk_output_type: inline
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code.
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*.
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(lattice)
+library(car)
+
+data <- read.csv("WA_Marketing-Campaign.csv")
+```
+
+```{r}
+### DATA ANALYSIS ###
+
+##Descriptive statistics
+aggregate(SalesInThousands ~ Promotion,
+          data = data,
+          function(x) round(c(mean = mean(x), sd = sd(x)), 2)
+)
+summary(data)
+```
+
+```{r}
+## SALES DISTRIBUTION
+SalesDist <- data %>%
+  group_by(Promotion) %>%
+  summarize(Sales=sum(SalesInThousands))%>%
+  mutate(Percentage=round(Sales/sum(Sales)*100))
+
+options(repr.plot.width = 20, repr.plot.height = 10)
+ggplot(SalesDist, aes(x="", y=Percentage, fill=Promotion)) +
+  geom_bar(width=1, stat="identity", position=position_fill()) +
+  geom_text(aes(x=1.25, label=Percentage), position=position_fill(vjust=0.5), color="white", size=10) +
+  coord_polar("y") +
+  ggtitle("Sales distribution by promotion, %") +
+  theme_classic() +
+  theme(legend.title = element_text(size = 20), legend.text = element_text(size = 20), plot.title = element_text(size = 30),
+        axis.title.x = element_text(size = 25))
+
+```
+
+```{r}
+  ## MARKET SIZE
+  Market <- data %>%
+    group_by(Promotion, MarketSize) %>%
+    summarize(Count=n())
+  
+  ggplot(Market, aes(x=Promotion, y=Count, fill=MarketSize)) +
+    geom_bar(width=0.5, stat="identity", position="stack") +
+    ylab("Count") +
+    xlab("Promotion") +
+    ggtitle("Market sizes by promotion") +
+    theme(legend.text=element_text(size=20), plot.title = element_text(size=27), axis.title = element_text(size = 25))
+
+```
+
+```{r}
+## STORE AGE
+Age <- data %>%
+  group_by(AgeOfStore) %>%
+  summarize(Count=n())
+
+ggplot(Age, aes(x=AgeOfStore, y=Count)) +
+  geom_bar(width=0.5, stat="identity", fill="orange") +
+  ylab("Count") +
+  xlab("Store Age") +
+  ggtitle("Store Age Distribution") +
+  theme(legend.text=element_text(size=20), plot.title = element_text(size=27), axis.title = element_text(size = 25))
+
+```
+
+```{r}
+tapply(data$AgeOfStore, data$Promotion, summary)
+
+```
+
+```{r}
+### HYPOTHESIS TESTING ###
+
+
+##ANOVA TESTS##
+## check normal distribution
+
+## check the homogeneity of variance
+boxplot(SalesInThousands ~ Promotion, data
+        )
+data$Promotion <- as.factor(data$Promotion)
+ggplot(data, aes(x=Promotion, y=SalesInThousands)) + 
+  geom_dotplot(binaxis='y', stackdir='center',
+               stackratio=0.5, dotsize=0.5)
+#There are outliers and ranges are not intuitively similar
+# Levene's Test
+# change Promotion variables to Qualitative
+Promotion <- as.character(data$Promotion)
+leveneTest(data$SalesInThousands ~ Promotion)
+#variances can be assumed equal by the Levene's Test
+```
+
+```{r}
+##ANOVA
+
+# 1st method:
+one_way_anova <- oneway.test(SalesInThousands ~ Promotion,
+            data = data,
+            var.equal = TRUE # assuming equal variances
+)
+one_way_anova
+# 2nd method:
+res_aov <- aov(SalesInThousands ~ Promotion,
+               data = data
+)
+
+summary(res_aov)
+#Report
+library("report") 
+
+report(res_aov)
+```
+
+```{r}
+### T-TEST ANALYSIS
+promo_1 <- data[which(data$Promotion==1),]$SalesInThousands
+promo_2 <- data[which(data$Promotion==2),]$SalesInThousands
+promo_3 <- data[which(data$Promotion==3),]$SalesInThousands
+
+## t-tests
+t_test12 <- t.test(promo_1, promo_2)
+t_test23 <- t.test(promo_2, promo_3)
+t_test13 <- t.test(promo_1, promo_3)
+print(t_test12) 
+## t-value=6.4275 p-value=4.29e-10
+print(t_test23)
+## t-value=-4.8814 p-value=1.569e-06
+print(t_test13)
+##  t-value=1.556 p-value=0.1206
+## We CANNOT REJECT tbe null hypothesis of similarity of Promotions 1 and 2, and 2 and 3. 
+## We CAN REJECT the null hypothesis of similarity of Promotions 1 and 3.
+
+```
+
+Regression of Promotion Influence on Sales
+
+```{r}
+library(lmtest)
+## Regression of large data of sales over promotion type
+summary(lm(SalesInThousands ~ Promotion + MarketSize + AgeOfStore, data))
+
+```
+
+Promotions over Time
+
+```{r}
+
+## Promotion 1
+Promotion1dta <- subset(data, Promotion == 1)
+
+## Promotion 2
+Promotion2dta <- subset(data, Promotion == 2)
+
+## Promotion 3
+Promotion3dta <- subset(data, Promotion == 3)
+
+```
+
+Plot Sales Over Time and by Market Size
+
+```{r}
+ggplot(Promotion1dta, aes(x=week, y=SalesInThousands, color=MarketSize, )) + 
+  geom_point() + 
+  geom_smooth(method=lm, aes(fill=week), fullrange=TRUE)
+
+ggplot(Promotion2dta, aes(x=week, y=SalesInThousands, color=MarketSize)) + 
+  geom_point() + 
+  geom_smooth(method=lm, aes(fill=week), fullrange=TRUE)
+
+ggplot(Promotion3dta, aes(x=week, y=SalesInThousands, color=MarketSize)) + 
+  geom_point() + 
+  geom_smooth(method=lm, aes(fill=week), fullrange=TRUE)
+```
+
+Plot Sales Over Time and by Market/Location
+
+```{r}
+Promotion1dta$MarketID <- cut(Promotion1dta$MarketID, c(1,2, 3, 4, 5, 6, 7, 8, 9, 10), right=FALSE)
+Promotion2dta$MarketID <- cut(Promotion2dta$MarketID, c(1,2, 3, 4, 5, 6, 7, 8, 9, 10), right=FALSE)
+Promotion3dta$MarketID <- cut(Promotion3dta$MarketID, c(1,2, 3, 4, 5, 6, 7, 8, 9, 10), right=FALSE)
+
+
+ggplot(Promotion1dta, aes(x=week, y=SalesInThousands, shape=MarketID, color=MarketID, )) + 
+  geom_point() + 
+  geom_smooth(method=lm, se=FALSE, fullrange=TRUE)
+
+ggplot(Promotion2dta, aes(x=week, y=SalesInThousands, shape=MarketID, color=MarketID)) + 
+  geom_point() + 
+  geom_smooth(method=lm, se=FALSE, fullrange=TRUE)
+
+ggplot(Promotion3dta, aes(x=week, y=SalesInThousands, shape=MarketID, color=MarketID)) + 
+  geom_point() + 
+  geom_smooth(method=lm, se=FALSE, fullrange=TRUE)
+```
